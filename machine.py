@@ -44,6 +44,7 @@ class Machine:
 				print(f"Exception at pc = {self.pc.counter}")
 				raise err
 		print(f"Program counter encountered memory boundary or end of input at pc = {self.pc.counter}")
+		# print("mar", self.mar.buffer)
 		print("Memory state at the end of execution:")
 		self.memory.prettyPrint()
 		return 0
@@ -90,7 +91,7 @@ class Instruction:
 
 		return word
 
-class Memory(Machine):
+class Memory():
 
 	def __init__(self, machine, size):
 		self.m = machine
@@ -153,19 +154,22 @@ class Memory(Machine):
 			'00010010': self.m.controlCircuits.storMxL,
 			'00010011': self.m.controlCircuits.storMxR,
 			# no op
-			'10000000': self.m.controlCircuits.noOp,
+			'10000000': self.m.controlCircuits.halt,
 			'00000000': self.m.controlCircuits.noOp
 		}
 		return instruction_set[opcode]
 
 	def store(self, data, address):
-		if type(address) == 'str':
-			address = int(str,2)
-		if type(data) != "str":
-			data = decToBin(data)
-		self.memory[address] = Instruction.padWord(data)
+		try:
+			if type(address).__name__ == 'str':
+				address = int(str,2)
+			if type(data).__name__ != "str":
+				data = decToBin(data)
+			self.memory[address] = Instruction.padWord(data)
+		except(TypeError):
+			raise UnloadNoneError("Attempted to unload data from empty MBR buffer")
 
-class MAR(Machine):
+class MAR():
 
 	def __init__(self, machine):
 		self.buffer = None
@@ -188,7 +192,7 @@ class MAR(Machine):
 		self.buffer = None
 
 
-class MBR(Machine):
+class MBR():
 
 	def __init__(self, machine):
 		self.buffer = None
@@ -233,7 +237,7 @@ class MBR(Machine):
 
 		self.buffer = None
 
-class IBR(Machine):
+class IBR():
 
 	def __init__(self, machine):
 		self.buffer = None
@@ -256,7 +260,7 @@ class IBR(Machine):
 	def hasNextInstruction():
 		return self.buffer != None
 
-class IR(Machine):
+class IR():
 
 	def __init__(self, machine):
 		self.buffer = None
@@ -274,7 +278,7 @@ class IR(Machine):
 
 		self.buffer = None
 
-class ControlCircuits(Machine):
+class ControlCircuits():
 
 	def __init__(self, machine):
 		self.buffer = None
@@ -325,23 +329,30 @@ class ControlCircuits(Machine):
 		self.alc.moveToAcc()
 
 	def jumpMxL(self):
-		self.m.mar.fetch()
+		self.m.mbr.buffer = self.m.mar.buffer
+		self.m.mar.buffer = None
 		self.m.pc.counter = int(self.m.mbr.buffer,2)
 		self.m.pc.startWord = 0
 
 	def jumpMxR(self):
-		self.m.mar.fetch()
+		self.m.mbr.buffer = self.m.mar.buffer
+		self.m.mar.buffer = None
 		self.m.pc.counter = int(self.m.mbr.buffer,2)
 		self.m.pc.startWord = 20
 
 	def jumpPlusMxL(self):
-		self.m.mar.fetch()
+		self.m.mbr.buffer = self.m.mar.buffer
+		self.m.mar.buffer = None
+		if type(self.m.accumulator.buffer).__name__ == "str":
+			self.m.accumulator.buffer = int(self.m.accumulator.buffer, 2)
+		# print("buffmaster",self.m.mbr.buffer, self.m.pc.counter)
 		if self.m.accumulator.buffer >= 0 :
 			self.m.pc.counter = int(self.m.mbr.buffer,2)
 			self.m.pc.startWord = 0
 
 	def jumpPlusMxR(self):
-		self.m.mar.fetch()
+		self.m.mbr.buffer = self.m.mar.buffer
+		self.m.mar.buffer = None
 		if self.m.accumulator.buffer >= 0 :
 			self.m.pc.counter = int(self.m.mbr.buffer,2)
 			self.m.pc.startWord = 20
@@ -389,6 +400,9 @@ class ControlCircuits(Machine):
 	def noOp(self):
 		return True
 
+	def halt(self):
+		self.m.pc.counter = 1001
+
 	def storMxL(self):
 		acBits = self.m.accumulator.buffer & 2**12 - 1
 		acBits = Instruction.padAddress(str(acBits))
@@ -402,7 +416,7 @@ class ControlCircuits(Machine):
 		self.changeAddress(acBits, 'right')
 
 
-class ALC(Machine):
+class ALC():
 
 	def __init__(self, machine):
 		self.m = machine
@@ -476,7 +490,7 @@ class ALC(Machine):
 		self.m.accumulator.load(a >> 1)
 
 
-class Accumulator(Machine):
+class Accumulator():
 
 	def __init__(self, machine):
 		self.buffer = None
@@ -485,21 +499,21 @@ class Accumulator(Machine):
 	def load(self, data):
 		self.buffer = data
 
-class MQ(Machine):
+class MQ():
 	def __init__(self, machine):
 		self.buffer = None
 		self.isNegative = False
-		self.m = Machine
+		self.m = machine
 
 	def load(self, data, isNegative = False):
 		self.buffer = data
 		self.isNegative = isNegative
 
 	def moveToAcc(self):
-		self.accumulator.load(self.buffer)
+		self.m.accumulator.load(self.buffer)
 		self.buffer = None
 
-class PC(Machine):
+class PC():
 	def __init__(self, machine, start):
 		self.m = machine
 		self.counter = int(start,2)
@@ -521,14 +535,29 @@ def run():
 	'''
 	Add instructions and data to the memory and initialize program counter start position
 	'''
+
+	'''
+	Following program implements a factorial calculator, memory[0] is the input for the program
+	'''
 	machine = Machine(1000,'00100000')
-	machine.memory.memory[0] = "0000000000000000000000000000000000000101"
-	machine.memory.memory[1] = "0000000000000000000000000000000000000011"
-	machine.memory.memory[32] = '0000100100000000000000001011000000000001'
-									 # "100000000000000000101000000000001"
-	machine.memory.memory[33] = '0000000000000000000000100001000000000010'
+	machine.memory.memory[0] = "0000000000000000000000000000000000000100" # input
+
+	machine.memory.memory[1] = "0000000000000000000000000000000000000001" # output
+	machine.memory.memory[2] = "0000000000000000000000000000000000000001"
+	machine.memory.memory[3] = "0000000000000000000000000000000000000000"
+
+	machine.memory.memory[33] = '00001001''000000000000' + '00001011''000000000001' # multiply mem[0] with mem[1]
+	machine.memory.memory[34] = '00100001''000000000001' + '00000000''000000000000' # store result to mem[1]
+	machine.memory.memory[35] = '00001001''000000000000' + '00001010''000000000000' # take mem[0], load to accumulator
+	machine.memory.memory[36] = '00000110''000000000010' + '00100001''000000000011' # subtract 1, stor that to mem[3]
+	machine.memory.memory[37] = '00000001''000000000011' + '00100001''000000000000' # store that same value to mem[0]
+	machine.memory.memory[38] = '00001001''000000000011' + '00001010''000000000000' # load mem[3] to accumulator for conditional jump
+	machine.memory.memory[39] = '00000110''000000000010' + '00001111''000000100000' # subtract 1, ready for conditional jump, jump to mem[32] if accumulator positive
+	machine.memory.memory[40] = '10000000''000000000000' + '00000000''000000000000' # halt
+
+	print("value on input stream:", machine.memory.memory[0])
 	machine.start()
+	print("value on output stream:", machine.memory.memory[1])
 
 	pass
-
 run()
