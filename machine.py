@@ -1,5 +1,19 @@
-def decToBin(n):  
-    return bin(n).replace("0b", "")
+
+# takes care of sign while converting to integer from binary
+def int_(string, base):
+	if string[0] == "1":
+		return -1 * int(string[1:], 2)
+	return int(string[1:], 2)
+
+
+def decToBin(n):
+	neg = False
+	temp = bin(n).replace("0b", "")
+	if n < 0:
+		neg = True
+		temp = temp.replace("-", "")
+
+	return (temp, neg)
 
 class Machine:
 
@@ -20,9 +34,11 @@ class Machine:
 	def start(self):
 		input(f"Machine start at instruction pointer pc = {self.pc.counter} in memory\nEnter to start")
 		while self.pc.counter < self.memory.size:
+			cycle = None
 			try:
 			# start instruction cycle
-				self.mar.load(Instruction.padAddress(decToBin(self.pc.counter)))
+				cycle = "instr"
+				self.mar.load(Instruction.padAddress(decToBin(self.pc.counter)[0])) # sure that pc can never be negative
 				self.mar.fetch(self.pc.startWord)
 				self.pc.startWord = 0
 				self.mbr.unload()
@@ -32,6 +48,7 @@ class Machine:
 					# end of instruction cycle
 
 					# start data cycle
+					cycle = "data"
 					func()
 					self.mbr.buffer = None
 					# end data cycle
@@ -41,10 +58,9 @@ class Machine:
 
 				self.pc.counter += 1
 			except Exception as err:
-				print(f"Exception at pc = {self.pc.counter}")
+				print(f"Exception at pc = {self.pc.counter}, in {cycle} cycle")
 				raise err
 		print(f"Program counter encountered memory boundary or end of input at pc = {self.pc.counter}")
-		# print("mar", self.mar.buffer)
 		print("Memory state at the end of execution:")
 		self.memory.prettyPrint()
 		return 0
@@ -85,9 +101,11 @@ class Instruction:
 		return instruction
 
 	@staticmethod
-	def padWord(word):
+	def padWord(word, neg = 0):
 		while(len(word) < 40):
 			word = '0' + word
+		if neg:
+			word[0] = '1'
 
 		return word
 
@@ -160,12 +178,13 @@ class Memory():
 		return instruction_set[opcode]
 
 	def store(self, data, address):
+		neg = False
 		try:
 			if type(address).__name__ == 'str':
-				address = int(str,2)
+				address = int_(str,2)
 			if type(data).__name__ != "str":
-				data = decToBin(data)
-			self.memory[address] = Instruction.padWord(data)
+				data, neg = decToBin(data)
+			self.memory[address] = Instruction.padWord(data, neg)
 		except(TypeError):
 			raise UnloadNoneError("Attempted to unload data from empty MBR buffer")
 
@@ -182,8 +201,8 @@ class MAR():
 		# print(f"fetch called on mar, buffer = {self.buffer} ")
 		if self.buffer:
 			try:
-				# print(int(self.buffer,2))
-				self.m.mbr.load(self.m.memory.memory[int(self.buffer,2)][startWord:])
+				# print(int_(self.buffer,2))
+				self.m.mbr.load(self.m.memory.memory[int_(self.buffer,2)][startWord:])
 			except IndexError as e:
 				raise MemoryAccessError("Attempted to access invalid memory location")
 		else:
@@ -303,7 +322,7 @@ class ControlCircuits():
 
 	def storMx(self):
 		self.m.alc.moveToMbr()
-		self.m.mbr.storeToMemory(int(self.m.mar.buffer,2))
+		self.m.mbr.storeToMemory(int_(self.m.mar.buffer,2))
 
 	def loadMx(self):
 		self.m.mar.fetch()
@@ -331,50 +350,50 @@ class ControlCircuits():
 	def jumpMxL(self):
 		self.m.mbr.buffer = self.m.mar.buffer
 		self.m.mar.buffer = None
-		self.m.pc.counter = int(self.m.mbr.buffer,2)
+		self.m.pc.counter = int_(self.m.mbr.buffer,2)
 		self.m.pc.startWord = 0
 
 	def jumpMxR(self):
 		self.m.mbr.buffer = self.m.mar.buffer
 		self.m.mar.buffer = None
-		self.m.pc.counter = int(self.m.mbr.buffer,2)
+		self.m.pc.counter = int_(self.m.mbr.buffer,2)
 		self.m.pc.startWord = 20
 
 	def jumpPlusMxL(self):
 		self.m.mbr.buffer = self.m.mar.buffer
 		self.m.mar.buffer = None
 		if type(self.m.accumulator.buffer).__name__ == "str":
-			self.m.accumulator.buffer = int(self.m.accumulator.buffer, 2)
+			self.m.accumulator.buffer = int_(self.m.accumulator.buffer, 2)
 		# print("buffmaster",self.m.mbr.buffer, self.m.pc.counter)
 		if self.m.accumulator.buffer >= 0 :
-			self.m.pc.counter = int(self.m.mbr.buffer,2)
+			self.m.pc.counter = int_(self.m.mbr.buffer,2)
 			self.m.pc.startWord = 0
 
 	def jumpPlusMxR(self):
 		self.m.mbr.buffer = self.m.mar.buffer
 		self.m.mar.buffer = None
 		if self.m.accumulator.buffer >= 0 :
-			self.m.pc.counter = int(self.m.mbr.buffer,2)
+			self.m.pc.counter = int_(self.m.mbr.buffer,2)
 			self.m.pc.startWord = 20
 
 	def addMx(self):
 		self.m.mar.fetch()
-		self.m.alc.add(int(self.m.mbr.buffer,2), int(self.m.accumulator.buffer,2))
+		self.m.alc.add(int_(self.m.mbr.buffer,2), int_(self.m.accumulator.buffer,2))
 		self.m.mbr.buffer = None
 
 	def addAbsMx(self):
 		self.m.mar.fetch()
-		self.m.alc.add(abs(int(self.m.mbr.buffer,2)), int(self.m.accumulator.buffer,2))
+		self.m.alc.add(abs(int_(self.m.mbr.buffer,2)), int_(self.m.accumulator.buffer,2))
 		self.m.mbr.buffer = None
 
 	def subMx(self):
 		self.m.mar.fetch()
-		self.m.alc.subtract(int(self.m.accumulator.buffer,2), int(self.m.mbr.buffer,2))
+		self.m.alc.subtract(int_(self.m.accumulator.buffer,2), int_(self.m.mbr.buffer,2))
 		self.m.mbr.buffer = None
 
 	def subAbsMx(self):
 		self.m.mar.fetch()
-		self.m.alc.subtract(int(self.m.accumulator.buffer,2), abs(int(self.m.mbr.buffer,2)))
+		self.m.alc.subtract(int_(self.m.accumulator.buffer,2), abs(int_(self.m.mbr.buffer,2)))
 		self.m.mbr.buffer = None
 
 	def mulMx(self):
@@ -446,9 +465,9 @@ class ALC():
 	def multiply(self, a, b):
 		# print(a, b)
 		if type(a).__name__ == "str":
-			a = int(a,2)
+			a = int_(a,2)
 		if type(b).__name__ == "str":
-			b = int(b,2)
+			b = int_(b,2)
 		mul = a * b
 		isNegative = mul < 0
 		mul = abs(mul)
@@ -467,9 +486,9 @@ class ALC():
 	def divide(self, a, b):
 
 		if type(a).__name__ == "str":
-			a = int(a,2)
+			a = int_(a,2)
 		if type(b).__name__ == "str":
-			b = int(b,2)
+			b = int_(b,2)
 
 		quotient = a // b
 		remainder = a % b
@@ -479,13 +498,13 @@ class ALC():
 
 	def leftShift(self, a):
 		if type(a).__name__ == "str":
-			a = int(a,2)
+			a = int_(a,2)
 
 		self.m.accumulator.load(a << 1)
 
 	def rightShift(self, a):
 		if type(a).__name__ == "str":
-			a = int(a,2)
+			a = int_(a,2)
 
 		self.m.accumulator.load(a >> 1)
 
@@ -516,7 +535,7 @@ class MQ():
 class PC():
 	def __init__(self, machine, start):
 		self.m = machine
-		self.counter = int(start,2)
+		self.counter = int_(start,2)
 		self.startWord = 0
 
 
@@ -540,7 +559,7 @@ def run():
 	Following program implements a factorial calculator, memory[0] is the input for the program
 	'''
 	machine = Machine(1000,'00100000')
-	machine.memory.memory[0] = "0000000000000000000000000000000000000100" # input
+	machine.memory.memory[0] = "000000000000000000000000000000000000110" # input
 
 	machine.memory.memory[1] = "0000000000000000000000000000000000000001" # output
 	machine.memory.memory[2] = "0000000000000000000000000000000000000001"
