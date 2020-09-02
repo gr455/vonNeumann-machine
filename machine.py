@@ -5,7 +5,6 @@ def int_(string, base):
 		return -1 * int(string[1:], 2)
 	return int(string[1:], 2)
 
-
 def decToBin(n):
 	neg = False
 	temp = bin(n).replace("0b", "")
@@ -14,6 +13,10 @@ def decToBin(n):
 		temp = temp.replace("-", "")
 
 	return (temp, neg)
+
+def negBin(string):
+	string[0] = "1"
+	return string
 
 class Machine:
 
@@ -331,19 +334,26 @@ class ControlCircuits():
 
 	def loadMinusMx(self):
 		self.m.mar.fetch()
-		self.m.mbr.buffer = -self.m.mbr.buffer
+		loading = decToBin(-int_(self.m.mbr.buffer,2))
+		if loading[1]:
+			loading = negBin(loading[0])
+		else:
+			loading = loading[0]
+
+
+		self.m.mbr.buffer = loading
 
 		self.m.alc.moveToAcc()
 
 	def loadAbsMx(self):
 		self.m.mar.fetch()
-		self.m.mbr.buffer = abs(self.m.mbr.buffer)
+		self.m.mbr.buffer = decToBin(abs(int_(self.m.mbr.buffer, 2)))[0]
 
 		self.m.alc.moveToAcc()
 
 	def loadMinusAbsMx(self):
 		self.mar.fetch()
-		self.mbr.buffer = -abs(self.m.mbr.buffer)
+		self.mbr.buffer = negBin(decToBin(-abs(int_(self.m.mbr.buffer, 2)))[0])
 
 		self.alc.moveToAcc()
 
@@ -550,16 +560,13 @@ class IllegalOperationError(Exception):
 	''' to be raised when a function is passed invalid argument '''
 
 
-def run():
-	'''
-	Add instructions and data to the memory and initialize program counter start position
-	'''
+# Test programs
 
-	'''
-	Following program implements a factorial calculator, memory[0] is the input for the program
-	'''
-	machine = Machine(1000,'00100000')
-	machine.memory.memory[0] = "000000000000000000000000000000000000110" # input
+'''
+The following program implements a factorial calculator, memory[0] is the input for the program
+'''
+def factorial(machine):
+	machine.memory.memory[0] = "0000000000000000000000000000000000000110" # input
 
 	machine.memory.memory[1] = "0000000000000000000000000000000000000001" # output
 	machine.memory.memory[2] = "0000000000000000000000000000000000000001"
@@ -574,9 +581,29 @@ def run():
 	machine.memory.memory[39] = '00000110''000000000010' + '00001111''000000100000' # subtract 1, ready for conditional jump, jump to mem[32] if accumulator positive
 	machine.memory.memory[40] = '10000000''000000000000' + '00000000''000000000000' # halt
 
-	print("value on input stream:", machine.memory.memory[0])
+	inp = machine.memory.memory[0]
 	machine.start()
+	print("value on input stream:", inp)
 	print("value on output stream:", machine.memory.memory[1])
 
-	pass
+'''
+The following program calculates modulus of a given integer
+'''
+def modulus(machine):
+	machine.memory.memory[0] = "1000000000000000000000000000000000000110" # input
+	machine.memory.memory[1] = "0000000000000000000000000000000000000000" # output
+
+	machine.memory.memory[32] = '00000011''000000000000' + '00100001''000000000001' # load mod mem[0] and store that to mem[1]
+	inp = machine.memory.memory[0]
+	machine.start()
+	print("value on input stream:", inp)
+	print("value on output stream:", machine.memory.memory[1])
+
+def run():
+	'''
+	Add instructions and data to the memory and initialize program counter start position
+	'''
+	machine = Machine(1000,'00100000')
+	factorial(machine)
+	
 run()
